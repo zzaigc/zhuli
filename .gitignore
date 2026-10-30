@@ -1,0 +1,37 @@
+# ===== 敏感配置（绝不入库）=====
+# 真实个人配置：含模型端点、供应商偏好等私密信息。
+# 仓库只提供 config/settings.yaml.example 模板，clone 后复制并填入你自己的配置。
+config/settings.yaml
+*.env
+.env
+.env.*
+
+# ===== 运行时产物（不入库）=====
+# venv / 浏览器二进制 / 浏览器 profile / 本地记忆数据库 / 日志
+.zhuli_runtime/
+*.log
+*.log.*
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ===== 前端 =====
+frontend/node_modules/
+frontend/dist/
+
+# 前端构建产物本身要提交（FastAPI 直接静态托管，clone 即用，无需 Node 环境）
+!src/zhuli/console/static/
+
+# ===== 编辑器 / 系统 =====
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

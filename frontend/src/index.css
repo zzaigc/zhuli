@@ -1,0 +1,60 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background:
+    radial-gradient(1200px 600px at 15% -10%, rgba(59, 130, 246, 0.18), transparent 60%),
+    radial-gradient(1000px 500px at 100% 0%, rgba(99, 102, 241, 0.16), transparent 55%),
+    #0b1120;
+  color: #e5e7eb;
+  font-family: "Montserrat", ui-sans-serif, system-ui, sans-serif;
+}
+
+/* 玻璃面板：半透明 + 模糊 + 霓虹描边 */
+.glass {
+  background: linear-gradient(180deg, rgba(30, 41, 59, 0.55), rgba(17, 24, 39, 0.55));
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(34, 211, 238, 0.18);
+  box-shadow: 0 0 24px rgba(34, 211, 238, 0.08);
+}
+
+.glass-strong {
+  border-color: rgba(34, 211, 238, 0.4);
+  box-shadow: 0 0 30px rgba(34, 211, 238, 0.18);
+}
+
+.neon-text {
+  color: #22d3ee;
+  text-shadow: 0 0 12px rgba(34, 211, 238, 0.45);
+}
+
+/* 细滚动条 */
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(34, 211, 238, 0.3);
+  border-radius: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+input,
+button,
+textarea {
+  font-family: inherit;
+}

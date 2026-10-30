@@ -1,0 +1,92 @@
+# ZHULI 配置示例（复制为 config/settings.yaml 并填写，注意：敏感项只存引用，不存明文）
+
+# ---- 模型 provider（兼容 OpenAI 格式，可配置多家）----
+providers:
+  - name: deepseek
+    base_url: https://api.deepseek.com/v1
+    api_key_env: DEEPSEEK_API_KEY          # 从环境变量读取，绝不写明文
+    default_model: deepseek-chat
+    # 也可改用 keyring： api_key_service: "zhuli:deepseek"
+  - name: openai
+    base_url: https://api.openai.com/v1
+    api_key_env: OPENAI_API_KEY
+    default_model: gpt-4o
+    embedding_model: text-embedding-3-small   # 用于技能语义检索（可选）
+    models:
+      vision: gpt-4o
+      reasoning: gpt-4o
+      default: gpt-4o-mini
+  - name: kimi
+    base_url: https://api.moonshot.cn/v1
+    api_key_env: KIMI_API_KEY
+    default_model: moonshot-v1-8k
+  - name: glm
+    base_url: https://open.bigmodel.cn/api/paas/v4
+    api_key_env: GLM_API_KEY
+    default_model: glm-4v
+    models:
+      vision: glm-4v
+
+# ---- 能力路由：把不同能力路由到具体 provider 名称 ----
+routing:
+  vision: openai                # 含截图/视觉理解的任务（需 provider 支持 vision 模型）
+  reasoning: deepseek           # 结构化推理/默认决策
+  default: deepseek
+  embeddings: openai           # 技能语义检索用的 embedding provider（留空则回退关键词）
+
+# ---- 多智能体团队：每个角色可绑定不同 provider / capability（分布式协作）----
+# provider 留空或不配置该角色时，沿用 routing 中对应 capability 的设置。
+agents:
+  planner:     { provider: deepseek, capability: reasoning }   # 任务规划
+  observer:    { provider: deepseek, capability: default }     # 观察蒸馏
+  actor:       { provider: deepseek, capability: reasoning }   # 动作决策
+  critic:      { provider: deepseek, capability: reasoning }   # 执行前批评 / 执行后反思
+  risk:        { provider: deepseek, capability: default }     # 风险分级
+  skill_miner: { provider: deepseek, capability: reasoning }   # 技能挖掘与迭代
+
+# ---- 行为策略 ----
+policy:
+  max_steps: 40                 # 单任务最大步数
+  step_timeout_sec: 120
+  confirm_dangerous: true       # 危险操作/命令弹确认
+  auto_execute_safe: true       # 安全动作自动执行
+  multi_agent: true             # 多智能体协作总开关（false = 回退单脑模式）
+  self_critique: true           # 执行前自我批评（Critic 智能体审查动作）
+  observer_enabled: true        # 观察蒸馏（Observer 智能体过滤无关元素）
+  skill_promote_threshold: 2    # 技能成功复用达此次数即自动升格为专项智能体
+  hive_mode: false              # 蜂巢思维：多个执行体并行提案 + 投票共识择优
+  hive_size: 3                  # 蜂群规模（1~4；越大越强也越费 token）
+
+# ---- 军事级加密 ----
+security:
+  # 主口令来源优先级：环境变量 ZHULI_MASTER_KEY > 系统凭据库 > 仅内存会话密钥
+  # 推荐设置 ZHULI_MASTER_KEY（口令不落系统凭据库，安全性最高）
+  master_key_env: ZHULI_MASTER_KEY
+  pbkdf2_iterations: 600000     # PBKDF2-HMAC-SHA256 迭代次数（OWASP 建议量级）
+  encrypt_credentials: true     # 凭据落库前先做 AES-256-GCM 信封加密
+
+# ---- 浏览器（独立隔离 profile，与日常浏览器互不干扰）----
+browser:
+  headless: false
+  user_data_dir: .zhuli_runtime/profile    # 相对路径，自动落在项目 .zhuli_runtime/ 子目录（E 盘），绝不进 C 盘
+  viewport:
+    width: 1280
+    height: 800
+
+# ---- 电脑命令护栏 ----
+computer:
+  max_output_chars: 20000
+  timeout_sec: 60
+  allowed_dirs: []              # 限制可写目录（空=不限制，建议生产填具体目录）
+
+# ---- 外部工具连接器（复用 browser / computer 能力）----
+integrations:
+  codebuddy:
+    type: browser
+    url: https://copilot.tencent.com/chat
+  trae:
+    type: browser
+    url: https://www.trae.ai
+  opencode:
+    type: computer
+    command: ["opencode"]
