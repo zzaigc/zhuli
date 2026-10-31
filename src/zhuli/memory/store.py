@@ -18,7 +18,11 @@ class MemoryStore:
     def __init__(self, db_path: Path | None = None) -> None:
         self.db_path = db_path or _DB_PATH
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(str(self.db_path))
+        # v0.2.0: callers use asyncio.to_thread for store methods, so the
+        # connection must be usable from worker threads (v0.1.0 crashed
+        # with "SQLite objects created in a thread..." on any task run).
+        # Orchestrator skill calls are sequential, not concurrent writes.
+        self._conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._init()
 
