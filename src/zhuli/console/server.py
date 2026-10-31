@@ -17,6 +17,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from ..agents import HiveCoordinator
+from ..agents.runtime import hive_override, set_hive_enabled, set_hive_size
 from ..config.settings import get_settings
 from ..core.events import to_ws, Event
 from ..core.orchestrator import Orchestrator
@@ -70,7 +71,7 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="ZHULI", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="ZHULI", version="0.2.0", lifespan=lifespan)
 
     @app.get("/health")
     async def health() -> dict:
@@ -131,6 +132,52 @@ def create_app() -> FastAPI:
             return {"ok": False, "error": f"未知供应商：{prov}"}
         llm_router.set_override(cap, prov)
         return {"ok": True, "overrides": llm_router.overrides()}
+
+    def _hive_status() -> dict:
+        """v0.2.0：当前蜂巢状态。运行时覆盖只存在内存中，重启后恢复配置值。"""
+        s = get_settings()
+        coord = hub.orch.coord
+        if isinstance(coord, HiveCoordinator):
+            mode, enabled, size = "hive", True, int(coord.hive_size)
+        elif s.policy.multi_agent:
+            mode, enabled, size = "multi", False, int(
+                hive_override().get("size") or s.policy.hive_size)
+        else:
+            mode, enabled, size = "single", False, int(s.policy.hive_size)
+        return {
+            "mode": mode,
+            "hive_mode": enabled,
+            "hive_size": size,
+            "config_hive_mode": bool(s.policy.hive_mode),
+            "config_hive_size": int(s.policy.hive_size),
+            "runtime_override": hive_override(),
+            "note": "运行时覆盖，不写回配置文件；重启后恢复为配置值。",
+        }
+
+    @app.get("/api/hive")
+    async def api_hive() -> dict:
+        return _hive_status()
+
+    @app.post("/api/hive")
+    async def api_set_hive(body: dict) -> dict:
+        """运行时切换蜂巢模式（与 /api/models 覆盖同款：不写回配置文件）。
+
+        body 可含 hive_mode（bool）与 hive_size（1~4 整数）；只给其中一项时
+        另一项保持当前值。hive_size 超出范围时返回错误且不做任何改动。
+        """
+        if "hive_size" in body and body["hive_size"] is not None:
+            try:
+                size = int(body["hive_size"])
+            except (TypeError, ValueError):
+                return {"ok": False, "error": "hive_size 必须是 1~4 的整数"}
+            if not 1 <= size <= 4:
+                return {"ok": False, "error": "hive_size 必须是 1~4 的整数"}
+            set_hive_size(size)
+        if "hive_mode" in body and body["hive_mode"] is not None:
+            set_hive_enabled(bool(body["hive_mode"]))
+        if hub.orch.rebuild_coordinator() is None:
+            return {"ok": False, "error": "智能体团队未就绪，无法重建协调器"}
+        return {"ok": True, **_hive_status()}
 
     @app.get("/api/security")
     async def api_security() -> dict:
