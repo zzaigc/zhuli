@@ -55,7 +55,16 @@ policy:
   observer_enabled: true        # 观察蒸馏（Observer 智能体过滤无关元素）
   skill_promote_threshold: 2    # 技能成功复用达此次数即自动升格为专项智能体
   hive_mode: false              # 蜂巢思维：多个执行体并行提案 + 投票共识择优
-  hive_size: 3                  # 蜂群规模（1~4；越大越强也越费 token）
+  hive_size: 3                  # 手动蜂群规模（>= 1，无上限；越大越费 token，token 约为规模倍数）
+  hive_size_mode: manual        # manual = 用 hive_size；auto = 按任务启发式自动选规模（2~8），默认手动不变
+  parallel_enabled: true        # v0.3.0 并行子目标：独立子任务分组并行思考、工具串行；浏览器步骤与 Hive 模式下强制顺序；控制台 /api/parallel 或 CLI --no-parallel 可运行时关闭
+  bidirectional_mode: "off"     # v0.3.0 双向开关默认值（三个位置互斥，默认关闭）：off = 仅本助理，两方向都关；ide_to_zhuli = IDE 经 MCP 操作 Zhuli，Zhuli 不可反向派发；zhuli_to_ide = Zhuli 派发到 IDE，MCP 派发被阻止；控制台开关是运行时覆盖，重启恢复为本值。注意：off 必须加引号，不加引号的 off 会被 YAML 解析成布尔 False（schema 里已做容错，False 会当成 off）。
+
+# ---- 混沌测试（v0.3.0，测试专用，默认关闭）----
+chaos:
+  enabled: false                # 默认关闭；运行时开启还需 CLI --chaos-test 或控制台测试接口确认串，正常任务不会触发
+  test_mode: false
+  isolated_root: null           # 测试运行目录（必须在系统临时目录下，由代码强制校验）
 
 # ---- 军事级加密 ----
 security:
