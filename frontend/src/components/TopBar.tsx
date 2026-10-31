@@ -12,6 +12,7 @@ interface Props {
   onModelChange: (capability: string, provider: string) => void;
   onOpenAgents: () => void;
   onOpenSettings: () => void;
+  onOpenToken: () => void;
 }
 
 const MODE_META: Record<AgentsResponse["mode"], { label: string; variant: "default" | "indigo" | "warn" }> = {
@@ -39,6 +40,7 @@ export default function TopBar({
   onModelChange,
   onOpenAgents,
   onOpenSettings,
+  onOpenToken,
 }: Props) {
   const m = MODE_META[mode] ?? MODE_META.multi;
   const s = STATUS_META[status] ?? { label: status, variant: "outline" as const };
@@ -95,6 +97,9 @@ export default function TopBar({
           )}
         </div>
 
+        <Button variant="outline" size="sm" onClick={onOpenToken}>
+          Token 用量
+        </Button>
         <Button variant="outline" size="sm" onClick={onOpenAgents}>
           <Users className="w-3.5 h-3.5" /> 智能体团队
         </Button>
