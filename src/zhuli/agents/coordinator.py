@@ -103,7 +103,8 @@ class Coordinator:
     # ---------- 决策（执行 + 批评 + 风险 并发）----------
     async def decide(self, *, observation: str, subtask: str, verification: list[str] | None,
                      history: list[dict], skills_text: str = "",
-                     known_ids: list[str] | None = None, url: str = "") -> dict:
+                     known_ids: list[str] | None = None, url: str = "",
+                     total_subtasks: int | None = None) -> dict:
         if self._single_brain():
             return await self._fallback_decide(
                 observation=observation, subtask=subtask, verification=verification,
