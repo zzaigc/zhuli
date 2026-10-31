@@ -1,0 +1,29 @@
+/* Zhuli v0.3.0 并行开关，黑客主题（挂在 Hive 面板内时复用其字体与颜色）。 */
+.zhuli-parallel-section {
+  border-top: 1px dashed #00ff66 !important;
+  margin-top: 12px; padding-top: 10px;
+}
+.zhuli-parallel-section h3 { font-size: 13px; margin: 0; }
+.zhuli-parallel-section h3::before { content: "> "; color: #00ff00; }
+.zhuli-parallel-section h3::after { content: " //"; color: #009944; }
+.zhuli-parallel-section p { font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.zhuli-parallel-head { display: flex; justify-content: space-between; align-items: center; }
+.zhuli-parallel-sub { color: #00cc55 !important; }
+.zhuli-parallel-warn { color: #ffcc00 !important; }
+button.zhuli-parallel-toggle { border-radius: 999px !important; padding: 4px 14px !important; cursor: pointer; }
+button.zhuli-parallel-toggle.on {
+  background: #00ff00 !important; color: #000000 !important; border: 1px solid #00ff00 !important;
+}
+button.zhuli-parallel-toggle.off {
+  background: transparent !important; color: #00ff66 !important; border: 1px solid #00ff66 !important;
+}
+#zhuli-parallel-panel {
+  position: fixed; left: 12px; bottom: 92px; width: 360px; max-height: 45vh;
+  overflow-y: auto; z-index: 55; box-sizing: border-box; padding: 12px;
+  background: #000000 !important; color: #00ff66 !important;
+  border: 1px solid #00ff66 !important;
+  font-family: "JetBrains Mono", "Cascadia Mono", Menlo, Consolas, monospace !important;
+}
+@media (max-width: 900px) {
+  #zhuli-parallel-panel { width: calc(100vw - 24px); }
+}
