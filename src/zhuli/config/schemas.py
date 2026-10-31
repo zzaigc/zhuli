@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class ProviderConfig(BaseModel):
@@ -46,11 +46,32 @@ class PolicyConfig(BaseModel):
     observer_enabled: bool = True      # 观察蒸馏
     skill_promote_threshold: int = 2   # 技能升格为专项智能体的成功次数阈值
     hive_mode: bool = False            # 蜂巢思维：多执行体并行提案 + 共识择优
-    hive_size: int = 3                 # 蜂群规模（执行体数量，1~4）
+    hive_size: int = 3                 # 手动蜂群规模（执行体数量，>= 1，无上限；自动模式下每步另行决定，范围 2~8）
+    hive_size_mode: Literal["manual", "auto"] = "manual"  # manual = 用 hive_size；auto = 按任务启发式自动选规模（2~8），默认手动不变
+    parallel_enabled: bool = True      # v0.3.0 并行子目标：独立子任务分组并行思考、工具串行；浏览器步骤与 Hive 模式下强制顺序
+    bidirectional_mode: Literal["off", "ide_to_zhuli", "zhuli_to_ide"] = "off"  # v0.3.0 双向开关默认值：off = 仅本助理；ide_to_zhuli = IDE 经 MCP 操作 Zhuli；zhuli_to_ide = Zhuli 派发到 IDE；三个位置互斥，默认关闭，控制台开关是运行时覆盖，重启恢复为本值
+
+    @field_validator("bidirectional_mode", mode="before")
+    @classmethod
+    def _coerce_yaml_off(cls, value):
+        # YAML 1.1 陷阱：不加引号的 off 会被解析成布尔 False，
+        # 直接进 Literal 校验会让整个配置加载失败。False 在这里只
+        # 有一种合理含义：关。其它非字符串值仍交给 pydantic 报错。
+        if value is False:
+            return "off"
+        return value
     multi_agent: bool = True               # 多智能体协作总开关（关闭则回退单脑模式）
     self_critique: bool = True             # 执行前自我批评（Critic 智能体）
     observer_enabled: bool = True          # 观察蒸馏（Observer 智能体）
     skill_promote_threshold: int = 2       # 技能成功复用达到此次数即升格为专项智能体
+
+
+class ChaosConfig(BaseModel):
+    """混沌测试配置：测试专用，默认关闭，绝不自动改配置。"""
+
+    enabled: bool = False  # v0.3.0 混沌：默认关闭；运行时开启还需 CLI --chaos-test 或控制台测试接口确认串
+    test_mode: bool = False
+    isolated_root: str | None = None  # 测试运行目录（必须在系统临时目录下，由 guard 强制校验）
 
 
 class ViewportConfig(BaseModel):
@@ -92,6 +113,7 @@ class Settings(BaseModel):
     computer: ComputerConfig = Field(default_factory=ComputerConfig)
     integrations: dict[str, IntegrationConfig] = Field(default_factory=dict)
     security: SecurityConfig = Field(default_factory=SecurityConfig)
+    chaos: ChaosConfig = Field(default_factory=ChaosConfig)
 
     def provider(self, name: str) -> ProviderConfig | None:
         for p in self.providers:
