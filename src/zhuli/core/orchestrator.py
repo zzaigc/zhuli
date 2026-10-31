@@ -106,6 +106,18 @@ class Orchestrator:
         # 蜂巢模式（群体并行提案 + 共识择优）或常规多智能体流水线
         self.coord = build_coordinator(settings, self.registry, self._agent_sink)
 
+    def rebuild_coordinator(self):
+        """v0.2.0：用当前运行时覆盖重建协调器（Hive 开关用），不改写配置文件。
+
+        返回新协调器；注册表未就绪时返回 None。正在运行的任务不受影响，
+        新协调器只用于后续任务的决策。
+        """
+        if self.registry is None:
+            return None
+        settings = get_settings()
+        self.coord = build_coordinator(settings, self.registry, self._agent_sink)
+        return self.coord
+
     async def _agent_sink(self, event) -> None:
         """把多智能体活动事件转发给控制台（让「哪个智能体做了什么」可见）。"""
         await self.sink(event)
@@ -512,6 +524,19 @@ class Orchestrator:
             name = action.target or self.ctx.target_tool
             if not name:
                 return "未指定外部工具"
+            # v0.2.0：派发前先做显式检查（未知工具 / 缺页面 / 缺二进制），
+            # 失败直接返回，不让异常进入决策循环；再走一次派发确认。
+            from ..integrations.dispatch import check as dispatch_check
+            _conn = self.connectors.get(str(name).lower())
+            _cmd = getattr(_conn, "command", None) if _conn else None
+            _chk = dispatch_check(str(name), action.value or action.target or "",
+                                  page=self.page, command=_cmd)
+            if not _chk.get("ok"):
+                return str(_chk.get("error"))
+            if settings.policy.confirm_dangerous and not self._pre_confirmed:
+                if not await self._await_confirm(
+                        action, f"派发给外部 IDE 工具 {name}：它可能读写文件，确认后执行"):
+                    return "用户取消了外部工具派发"
             res = await self.coord.delegate(
                 name,
                 action.value or action.target or "",
