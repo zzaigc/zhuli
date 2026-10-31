@@ -1,0 +1,70 @@
+/* Zhuli v0.2.0 Hive control, hacker theme.
+   Fixed panel above the fixed console footer; v0.3.0 default is
+   bottom-centered (hive.js computes it, so it never covers the
+   left-column task input by default). The CSS left value below is
+   only the pre-JS fallback.
+   ON state is solid bright green with black text; OFF state is an
+   outlined green button with green text. */
+#zhuli-hive-panel {
+  position: fixed; left: 12px; bottom: 92px; width: 360px; max-height: 45vh;
+  overflow-y: auto; z-index: 55; box-sizing: border-box; padding: 12px;
+  background: #000000 !important; color: #00ff66 !important;
+  border: 1px solid #00ff66 !important;
+  font-family: "JetBrains Mono", "Cascadia Mono", Menlo, Consolas, monospace !important;
+}
+#zhuli-hive-panel h2 { font-size: 15px; margin: 0; }
+#zhuli-hive-panel h2::before { content: "> "; color: #00ff00; }
+#zhuli-hive-panel h3 { font-size: 13px; margin: 10px 0 6px 0; }
+#zhuli-hive-panel h3::before { content: "> "; color: #00ff00; }
+#zhuli-hive-panel h3::after { content: " //"; color: #009944; }
+#zhuli-hive-panel p { font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.zhuli-hive-head { display: flex; justify-content: space-between; align-items: center; gap: 6px; cursor: grab; touch-action: none; }
+.zhuli-hive-head:active { cursor: grabbing; }
+.zhuli-hive-collapse, .zhuli-hive-reset {
+  background: transparent !important; color: #00ff66 !important;
+  border: 1px solid #00ff66 !important; border-radius: 999px !important;
+  padding: 2px 10px !important; cursor: pointer; font-size: 12px; white-space: nowrap;
+}
+.zhuli-hive-size-input {
+  background: #000000 !important; color: #00ff66 !important;
+  border: 1px solid #00ff66 !important; padding: 2px 6px; width: 72px;
+}
+.zhuli-hive-apply, .zhuli-hive-preset {
+  background: transparent !important; color: #00ff66 !important;
+  border: 1px solid #00ff66 !important; border-radius: 999px !important;
+  padding: 2px 10px !important; cursor: pointer; font-size: 12px;
+}
+.zhuli-hive-estimate { color: #ffcc00 !important; }
+.zhuli-hive-auto { color: #00cc55 !important; }
+.zhuli-hive-fab {
+  position: fixed; width: 60px; height: 60px; border-radius: 50%;
+  display: none; flex-direction: column; align-items: center; justify-content: center;
+  z-index: 56; box-sizing: border-box;
+  background: #000000 !important; color: #00ff66 !important;
+  border: 2px solid #00ff66 !important; cursor: grab; touch-action: none;
+  font-family: "JetBrains Mono", "Cascadia Mono", Menlo, Consolas, monospace !important;
+}
+.zhuli-hive-fab.on { background: #00ff00 !important; color: #000000 !important; border-color: #00ff00 !important; }
+.zhuli-hive-fab-mark { font-size: 20px; line-height: 1; }
+.zhuli-hive-fab-state { font-size: 10px; line-height: 1.2; }
+.zhuli-hive-fab:focus-visible, .zhuli-hive-collapse:focus-visible, .zhuli-hive-reset:focus-visible,
+.zhuli-hive-apply:focus-visible, .zhuli-hive-preset:focus-visible {
+  outline: 2px solid #ffcc00; outline-offset: 2px;
+}
+.zhuli-hive-sub, .zhuli-hive-mech { color: #00cc55 !important; }
+.zhuli-hive-warn { color: #ffcc00 !important; }
+.zhuli-hive-row { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
+.zhuli-hive-row select {
+  background: #000000 !important; color: #00ff66 !important;
+  border: 1px solid #00ff66 !important; padding: 2px 6px;
+}
+button.zhuli-hive-toggle { border-radius: 999px !important; padding: 4px 14px !important; cursor: pointer; }
+button.zhuli-hive-toggle.on {
+  background: #00ff00 !important; color: #000000 !important; border: 1px solid #00ff00 !important;
+}
+button.zhuli-hive-toggle.off {
+  background: transparent !important; color: #00ff66 !important; border: 1px solid #00ff66 !important;
+}
+@media (max-width: 900px) {
+  #zhuli-hive-panel { width: calc(100vw - 24px); }
+}
