@@ -1,0 +1,40 @@
+/* Zhuli v0.2.0 right sidebar, hacker theme.
+   Fixed right panel; when open, the main console is narrowed by
+   margin-right so the layout reads as three columns (React left and
+   middle panels plus this sidebar). On narrow screens it overlays
+   instead of narrowing, which is noted in the docs. */
+#zhuli-right-sidebar {
+  position: fixed; top: 0; right: 0; width: 320px; height: 100vh;
+  z-index: 60; overflow-y: auto; box-sizing: border-box;
+  padding: 12px; background: #000000 !important; color: #00ff66 !important;
+  border-left: 1px solid #00ff66 !important;
+  font-family: "JetBrains Mono", "Cascadia Mono", Menlo, Consolas, monospace !important;
+}
+#zhuli-right-sidebar h2 { font-size: 16px; margin: 0; }
+#zhuli-right-sidebar h3 { font-size: 13px; margin: 0 0 8px 0; }
+#zhuli-right-sidebar h3::before { content: "> "; color: #00ff00; }
+#zhuli-right-sidebar h3::after { content: " //"; color: #009944; }
+#zhuli-right-sidebar p { font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; margin: 4px 0; }
+.zhuli-side-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.zhuli-side-section { border: 1px solid #00ff66 !important; padding: 10px; margin-bottom: 10px; background: #000000 !important; }
+.zhuli-side-empty, .zhuli-side-note { color: #009944 !important; }
+.zhuli-side-trace { color: #00cc55 !important; }
+.zhuli-side-toggle {
+  background: #00ff00 !important; color: #000000 !important;
+  border: 1px solid #00ff00 !important; border-radius: 999px !important;
+  padding: 4px 12px !important; cursor: pointer;
+}
+#zhuli-sidebar-expand {
+  display: none; position: fixed; right: 0; top: 50%; transform: translateY(-50%);
+  z-index: 60; background: #00ff00 !important; color: #000000 !important;
+  border: 1px solid #00ff00 !important; border-radius: 999px 0 0 999px !important;
+  padding: 8px 10px !important; cursor: pointer;
+}
+body.zhuli-sidebar-open #root { margin-right: 320px !important; }
+body.zhuli-sidebar-open header, body.zhuli-sidebar-open footer { right: 320px !important; }
+body.zhuli-sidebar-collapsed #zhuli-right-sidebar { display: none !important; }
+body.zhuli-sidebar-collapsed #zhuli-sidebar-expand { display: block !important; }
+@media (max-width: 900px) {
+  body.zhuli-sidebar-open #root { margin-right: 0 !important; }
+  body.zhuli-sidebar-open header, body.zhuli-sidebar-open footer { right: 0 !important; }
+}
