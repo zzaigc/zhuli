@@ -2,10 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import { Terminal, Monitor } from "lucide-react";
 import { api, connectWs } from "./ws";
 import type {
-  AgentInfo, AgentsResponse, ModelsResponse, SecurityInfo, SkillItem, ZAction, ZEvent,
+  AgentInfo, AgentsResponse, ModelsResponse, SecurityInfo, SkillItem, UsageResponse, ZAction, ZEvent,
 } from "./ws";
 import TopBar from "./components/TopBar";
-import ChatPanel, { type ChatMsg } from "./components/ChatPanel";
+import SessionPanel, { type ZhuliSession } from "./components/SessionPanel";
+import TokenPanel from "./components/TokenPanel";
+import ChatPanel, { type ChatMsg, type DispatchResult } from "./components/ChatPanel";
+import type { BidirectionalMode } from "./components/BidirectionalSwitch";
 import PlanPanel, { type PlanState } from "./components/PlanPanel";
 import OperationView, { type Shot } from "./components/OperationView";
 import TerminalPanel, { type TermLine } from "./components/TerminalPanel";
@@ -40,6 +43,15 @@ export default function App() {
   const [connected, setConnected] = useState(false);
   const [tools, setTools] = useState<string[]>([]);
   const [targetTool, setTargetTool] = useState("");
+  // v0.3.0 双向开关：一个值、三选一，默认关闭。浏览器 localStorage
+  // 只记显示位置；服务端值加载后会覆盖它，服务端永远是准的。
+  const [bidirectionalMode, setBidirectionalMode] = useState<BidirectionalMode>(() => {
+    try {
+      const raw = localStorage.getItem("zhuli-bidirectional-mode");
+      if (raw === "ide_to_zhuli" || raw === "zhuli_to_ide" || raw === "off") return raw;
+    } catch { /* ignore */ }
+    return "off";
+  });
   const [view, setView] = useState<"view" | "terminal">("view");
   const [dockTab, setDockTab] = useState<DockTab>("log");
   const [speed, setSpeed] = useState(1);
@@ -52,6 +64,94 @@ export default function App() {
   const [skills, setSkills] = useState<SkillItem[]>([]);
   const [showAgents, setShowAgents] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showToken, setShowToken] = useState(false);
+  const [usage, setUsage] = useState<UsageResponse | null>(null);
+  const [usageLoading, setUsageLoading] = useState(false);
+  // v0.3.0 sessions: browser-local only (localStorage). The server
+  // does not own session history; it only receives an optional
+  // session_id with a task for usage attribution.
+  const [sessions, setSessions] = useState<ZhuliSession[]>(() => {
+    try {
+      const raw = localStorage.getItem("zhuli-sessions");
+      if (raw) return JSON.parse(raw) as ZhuliSession[];
+    } catch { /* ignore corrupt storage */ }
+    return [];
+  });
+  const [sessionId, setSessionId] = useState<string>(() => {
+    try {
+      return localStorage.getItem("zhuli-session-current") || "";
+    } catch {
+      return "";
+    }
+  });
+
+  useEffect(() => {
+    // First run: create one session so tasks always carry an id.
+    if (sessions.length === 0) {
+      const now = Date.now();
+      const first: ZhuliSession = { id: `s-${now}`, title: "新会话", createdAt: now, updatedAt: now };
+      setSessions([first]);
+      setSessionId(first.id);
+      return;
+    }
+    if (!sessionId || !sessions.some((s) => s.id === sessionId)) {
+      setSessionId(sessions[0].id);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    try { localStorage.setItem("zhuli-sessions", JSON.stringify(sessions)); } catch { /* ignore */ }
+  }, [sessions]);
+
+  useEffect(() => {
+    try {
+      if (sessionId) localStorage.setItem("zhuli-session-current", sessionId);
+    } catch { /* ignore */ }
+  }, [sessionId]);
+
+  const clearVisible = () => {
+    setMessages([]);
+    setPlan(null);
+    setReflection(null);
+    setLogs([]);
+    setThoughts([]);
+    setActivity([]);
+    setSkillActivity([]);
+    setTermLines([]);
+    setPulse([]);
+    setShot(null);
+    setSkillsHit(0);
+    setStartedAt(null);
+    setConfirm(null);
+    setCred(null);
+    setStatusState("idle");
+  };
+
+  const newSession = () => {
+    const now = Date.now();
+    const s: ZhuliSession = { id: `s-${now}`, title: "新会话", createdAt: now, updatedAt: now };
+    setSessions((prev) => [s, ...prev]);
+    setSessionId(s.id);
+    clearVisible();
+    // Tell the v0.2.0 overlay sidebar and Hive panel to clear too.
+    try { window.dispatchEvent(new CustomEvent("zhuli-session-switch", { detail: { sessionId: s.id } })); } catch { /* ignore */ }
+  };
+
+  const switchSession = (id: string) => {
+    if (id === sessionId) return;
+    setSessionId(id);
+    setSessions((prev) => prev.map((s) => (s.id === id ? { ...s, updatedAt: Date.now() } : s)));
+    clearVisible();
+    try { window.dispatchEvent(new CustomEvent("zhuli-session-switch", { detail: { sessionId: id } })); } catch { /* ignore */ }
+  };
+
+  const loadUsage = () => {
+    setUsageLoading(true);
+    api.usage().then((u) => {
+      if (u) setUsage(u);
+      setUsageLoading(false);
+    });
+  };
 
   const wsRef = useRef<WebSocket | null>(null);
   const speedRef = useRef(1);
@@ -62,14 +162,48 @@ export default function App() {
     setMessages((m) => [...m, { role, text }].slice(-120));
 
   const loadStatic = async () => {
-    const [cfg, ag, sk, sec, md] = await Promise.all([
+    const [cfg, ag, sk, sec, md, bi] = await Promise.all([
       api.config(), api.agents(), api.skills(), api.security(), api.models(),
+      api.bidirectional(),
     ]);
     if (cfg) setTools(cfg.integrations ?? []);
     if (ag) setAgents(ag);
     if (sk) setSkills(sk);
     if (sec) setSecurity(sec);
     if (md) setModels(md);
+    // 服务端值优先：重启后开关回到配置值时，界面也跟服务端走。
+    if (bi && (bi.mode === "off" || bi.mode === "ide_to_zhuli" || bi.mode === "zhuli_to_ide")) {
+      setBidirectionalMode(bi.mode);
+      try { localStorage.setItem("zhuli-bidirectional-mode", bi.mode); } catch { /* ignore */ }
+      if (bi.mode !== "zhuli_to_ide") setTargetTool((prev) =>
+        ["codebuddy", "trae", "opencode"].includes(prev) ? "" : prev);
+    }
+  };
+
+  const changeBidirectional = (m: BidirectionalMode) => {
+    setBidirectionalMode(m);
+    try { localStorage.setItem("zhuli-bidirectional-mode", m); } catch { /* ignore */ }
+    // 切离 Zhuli → IDE 时，丢掉已选的 IDE 目标工具，避免旧值被误提交
+    // （后端对普通任务消息也有同样的检查，这里只是界面先行清理）。
+    if (m !== "zhuli_to_ide") {
+      setTargetTool((prev) => (["codebuddy", "trae", "opencode"].includes(prev) ? "" : prev));
+    }
+    api.setBidirectional(m).then((res) => {
+      if (res && (res.mode === "off" || res.mode === "ide_to_zhuli" || res.mode === "zhuli_to_ide")) {
+        setBidirectionalMode(res.mode);
+        try { localStorage.setItem("zhuli-bidirectional-mode", res.mode); } catch { /* ignore */ }
+      }
+    });
+  };
+
+  const dispatchToIde = async (
+    goal: string, tool: string, approvalId?: string
+  ): Promise<DispatchResult | null> => {
+    const res = await api.dispatch({
+      goal, tool,
+      ...(approvalId ? { approval_id: approvalId, approved: true } : {}),
+    });
+    return res as DispatchResult | null;
   };
 
   useEffect(() => {
@@ -187,7 +321,19 @@ export default function App() {
     setSkillsHit(0);
     setStartedAt(Date.now());
     setStatusState("running");
-    send({ type: "task", goal, target_tool: tool });
+    // First goal in a session becomes its title, plus a timestamp.
+    setSessions((prev) =>
+      prev.map((s) =>
+        s.id === sessionId && s.title === "新会话"
+          ? {
+              ...s,
+              title: `${goal.slice(0, 20)} · ${new Date().toLocaleString("zh-CN", { hour12: false })}`,
+              updatedAt: Date.now(),
+            }
+          : s
+      )
+    );
+    send({ type: "task", goal, target_tool: tool, session_id: sessionId });
   };
 
   const sendControl = (action: ControlAction) => send({ type: "control", action });
@@ -220,18 +366,31 @@ export default function App() {
         onModelChange={changeModel}
         onOpenAgents={() => setShowAgents(true)}
         onOpenSettings={() => setShowSettings(true)}
+        onOpenToken={() => { setShowToken(true); loadUsage(); }}
       />
 
       <main className="flex-1 min-h-0 pt-14 pb-[76px] p-3 grid grid-cols-12 gap-3">
-        <section className="col-span-3 min-h-0">
-          <ChatPanel
-            messages={messages}
-            tools={tools}
-            targetTool={targetTool}
-            onTargetChange={setTargetTool}
-            onSend={sendTask}
-            disabled={busy}
+        <section className="col-span-3 min-h-0 flex flex-col gap-3">
+          <SessionPanel
+            sessions={sessions}
+            currentId={sessionId}
+            busy={busy}
+            onNew={newSession}
+            onSwitch={switchSession}
           />
+          <div className="flex-1 min-h-0">
+            <ChatPanel
+              messages={messages}
+              tools={tools}
+              targetTool={targetTool}
+              onTargetChange={setTargetTool}
+              onSend={sendTask}
+              disabled={busy}
+              bidirectionalMode={bidirectionalMode}
+              onBidirectionalChange={changeBidirectional}
+              dispatchToIde={dispatchToIde}
+            />
+          </div>
         </section>
 
         <section className="col-span-6 min-h-0 flex flex-col gap-3">
@@ -295,6 +454,9 @@ export default function App() {
 
       {confirm && <ConfirmModal request={confirm} onResolve={resolveConfirm} />}
       {cred && <CredentialCard fields={cred.fields} onSubmit={submitCred} onCancel={() => submitCred({})} />}
+      {showToken && (
+        <TokenPanel data={usage} loading={usageLoading} onReload={loadUsage} onClose={() => setShowToken(false)} />
+      )}
       {showAgents && <AgentsModal data={agents} onClose={() => setShowAgents(false)} />}
       {showSettings && (
         <SettingsModal
