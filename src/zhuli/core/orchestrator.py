@@ -25,6 +25,9 @@ from ..integrations.codebuddy import CodeBuddyConnector
 from ..integrations.opencode import OpenCodeConnector
 from ..integrations.trae import TraeConnector
 from ..agents import Coordinator, build_coordinator, build_registry
+from ..agents.runtime import effective_parallel as _runtime_effective_parallel
+from ..llm.usage import reset_usage_context, set_usage_context
+from .parallel import GroupResult, ParallelRunner, plan_groups as _plan_groups, sanitize_groups
 from ..memory.skills import Skill, learn_from_task, retrieve_skills
 from ..memory.store import store
 from ..security.secure_string import SecureString
@@ -63,6 +66,7 @@ class Orchestrator:
         self._stop = False
         self._loop: Optional[asyncio.Task] = None
         self._matched_skills: list[Skill] = []
+        self._parallel_groups: list[list[str]] = []  # v0.3.0：最近一次计划的并行分组（供控制台查询）
         self.registry = None
         self.coord: Optional[Coordinator] = None
         self._pre_confirmed = False  # 风险智能体已确认过，避免规则护栏重复弹窗
@@ -106,6 +110,61 @@ class Orchestrator:
         # 蜂巢模式（群体并行提案 + 共识择优）或常规多智能体流水线
         self.coord = build_coordinator(settings, self.registry, self._agent_sink)
 
+    # ---------- v0.3.0 并行子目标 ----------
+    def parallel_enabled(self) -> bool:
+        """并行是否真正生效：Hive 开启时强制关闭（不双重并行）。"""
+        from ..agents import HiveCoordinator as _Hive
+
+        hive = isinstance(self.coord, _Hive) if self.coord is not None else False
+        try:
+            config_enabled = bool(get_settings().policy.parallel_enabled)
+        except Exception:
+            config_enabled = True
+        # 运行时覆盖由 agents.runtime 内部读取（优先于配置）；Hive 强制关闭。
+        return _runtime_effective_parallel(config_enabled, hive)
+
+    def plan_groups(self, subtasks=None, tools=None) -> list[list[str]]:
+        """对当前（或给定）子任务清单分组并过第二道防线。
+
+        返回的分组即下一次计划在控制台可见的分组。注意：实时浏览器
+        主循环仍顺序执行——每一步的观察依赖上一步结果、且多步共用
+        同一页面，并行分组不直接改写主循环；分组的执行由
+        run_parallel_groups 承担（独立非浏览器子任务单元，思考并行、
+        工具串行），主循环重构后可直接接管该分组。
+        """
+        subs = list(subtasks) if subtasks is not None else list(self.ctx.subtasks)
+        if not self.parallel_enabled():
+            groups = [[s] for s in subs]
+        else:
+            groups = sanitize_groups(_plan_groups(subs, tools))
+        self._parallel_groups = groups
+        return groups
+
+    async def run_parallel_groups(self, groups, think, execute) -> list[GroupResult]:
+        """按分组执行独立子任务：组顺序、组内思考并发、工具锁串行。
+
+        失败的组会自动顺序重跑；顺序重跑也失败时异常向上传递，
+        由调用方决定重规划或停机。Hive 模式下 parallel 参数为
+        False，分组退化为顺序执行。
+        """
+        runner = ParallelRunner()
+        return await runner.run_groups(
+            groups, think, execute, parallel=self.parallel_enabled())
+
+    # ---------- v0.3.0 并行子目标（结束） ----------
+
+    def rebuild_coordinator(self):
+        """v0.2.0：用当前运行时覆盖重建协调器（Hive 开关用），不改写配置文件。
+
+        返回新协调器；注册表未就绪时返回 None。正在运行的任务不受影响，
+        新协调器只用于后续任务的决策。
+        """
+        if self.registry is None:
+            return None
+        settings = get_settings()
+        self.coord = build_coordinator(settings, self.registry, self._agent_sink)
+        return self.coord
+
     async def _agent_sink(self, event) -> None:
         """把多智能体活动事件转发给控制台（让「哪个智能体做了什么」可见）。"""
         await self.sink(event)
@@ -117,11 +176,56 @@ class Orchestrator:
             await self.browser.__aexit__(None, None, None)
 
     # ---------- 人在回路控制 ----------
-    async def submit(self, goal: str, target_tool: Optional[str] = None) -> None:
+    async def submit(
+        self, goal: str, target_tool: Optional[str] = None,
+        session_id: Optional[str] = None,
+    ) -> None:
+        """Submit a task. session_id is optional and backward
+        compatible: old clients that omit it still work, and usage
+        records for such tasks simply carry session_id NULL. The
+        usage context is set before the run task is created so the
+        run inherits it, then reset in this task so later WebSocket
+        messages do not leak it into unrelated tasks."""
         self.ctx = TaskContext(goal=goal, target_tool=target_tool)
+        # v0.3.0 双向开关强制执行（不只是控制台 UI）：目标工具是外部
+        # IDE 时，只有开关在 Zhuli -> IDE 位置才允许提交；其它位置
+        # 直接记为 error 并广播一条错误事件，绝不创建执行循环。这条
+        # 检查覆盖控制台普通任务、/api/dispatch 与 MCP zhuli_run_task，
+        # 所以任何一路都绕不过开关。本助理任务（target_tool 为空）
+        # 不受开关影响。
+        if target_tool and str(target_tool).lower() in ("codebuddy", "trae", "opencode"):
+            try:
+                from ..agents.bidirectional import (
+                    console_block_reason as _block_reason,
+                    get_mode as _get_mode,
+                )
+                from ..config.settings import get_settings as _get_settings
+                try:
+                    _cfg_mode = _get_settings().policy.bidirectional_mode
+                except Exception:
+                    _cfg_mode = "off"
+                _mode = _get_mode(_cfg_mode)
+            except Exception:
+                _mode, _block_reason = "off", None
+            if _mode != "zhuli_to_ide":
+                self.ctx.status = "error"
+                reason = (_block_reason(_mode) if _block_reason else
+                          "双向开关不在 Zhuli -> IDE 位置，IDE 派发已被阻止")
+                try:
+                    await self.sink(ErrorEvent(type="error", message=reason))
+                except Exception:
+                    pass
+                return
         self._stop = False
         self._resume_event.set()
-        self._loop = asyncio.create_task(self._run())
+        from ..agents import HiveCoordinator as _Hive
+
+        hive = isinstance(self.coord, _Hive) if self.coord is not None else None
+        tokens = set_usage_context(session_id, hive)
+        try:
+            self._loop = asyncio.create_task(self._run())
+        finally:
+            reset_usage_context(tokens)
 
     def pause(self) -> None:
         if self.ctx.status == "running":
@@ -188,6 +292,17 @@ class Orchestrator:
         await self.sink(ThinkEvent(type="think", stage="plan",
                                    text=plan.get("thought") or "已生成初始计划"))
         await self._emit_plan()
+        # v0.3.0 并行分组（仅计划阶段可见）：独立子任务成组，浏览器/
+        # 依赖/共享资源步骤拆为单步；Hive 模式下全部单步。实时主循环
+        # 仍顺序执行（单页面、步间观察依赖），并行执行见 run_parallel_groups。
+        try:
+            groups = self.plan_groups()
+            summary = "；".join(f"组{i + 1}：{' + '.join(g)}" for i, g in enumerate(groups)) or "（无子任务）"
+            mode_note = "并行开" if self.parallel_enabled() else "并行关/Hive 模式：顺序执行"
+            await self.sink(ThinkEvent(type="think", stage="plan",
+                                       text=f"并行分组（{mode_note}）：{summary}"))
+        except Exception:
+            pass
 
         if self.ctx.target_tool and self.ctx.target_tool in self.connectors:
             conn = self.connectors[self.ctx.target_tool]
@@ -329,6 +444,7 @@ class Orchestrator:
             skills_text=skills_text,
             known_ids=known_ids,
             url=self.page.url if self.page else "",
+            total_subtasks=len(self.ctx.subtasks) if self.ctx.subtasks else None,
         )
         if res.get("abort"):
             await self.sink(ThinkEvent(type="think", stage="reflect",
@@ -512,6 +628,19 @@ class Orchestrator:
             name = action.target or self.ctx.target_tool
             if not name:
                 return "未指定外部工具"
+            # v0.2.0：派发前先做显式检查（未知工具 / 缺页面 / 缺二进制），
+            # 失败直接返回，不让异常进入决策循环；再走一次派发确认。
+            from ..integrations.dispatch import check as dispatch_check
+            _conn = self.connectors.get(str(name).lower())
+            _cmd = getattr(_conn, "command", None) if _conn else None
+            _chk = dispatch_check(str(name), action.value or action.target or "",
+                                  page=self.page, command=_cmd)
+            if not _chk.get("ok"):
+                return str(_chk.get("error"))
+            if settings.policy.confirm_dangerous and not self._pre_confirmed:
+                if not await self._await_confirm(
+                        action, f"派发给外部 IDE 工具 {name}：它可能读写文件，确认后执行"):
+                    return "用户取消了外部工具派发"
             res = await self.coord.delegate(
                 name,
                 action.value or action.target or "",
