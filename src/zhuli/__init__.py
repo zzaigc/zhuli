@@ -12,4 +12,4 @@
   - core.orchestrator: 观察→决策→执行→反思 主循环
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
