@@ -11,7 +11,8 @@ from typing import Any, Literal
 
 from openai import AsyncOpenAI
 
-from .router import Capability, resolve_for, resolve_model
+from .router import Capability, effective_provider, resolve_for, resolve_model
+from .usage import parse_usage, record as record_usage
 
 _client_cache: dict[str, AsyncOpenAI] = {}
 
@@ -45,6 +46,8 @@ async def chat_structured(
     schema_description: str = "按约束返回结构化结果",
     temperature: float = 0.2,
     provider: str | None = None,
+    session_id: str | None = None,
+    hive: bool | None = None,
 ) -> dict:
     """以函数调用方式强制 LLM 返回符合 schema 的 JSON，返回解析后的 dict。
 
@@ -64,6 +67,11 @@ async def chat_structured(
         tools=[tool],  # type: ignore[list-item]
         tool_choice={"type": "function", "function": {"name": schema_name}},
         temperature=temperature,
+    )
+    record_usage(
+        provider=effective_provider(provider, capability) or "unknown",
+        model=model, capability=capability, kind="chat",
+        usage=parse_usage(resp), session_id=session_id, hive=hive,
     )
     msg = resp.choices[0].message
     if msg.tool_calls:
@@ -85,6 +93,8 @@ async def chat_text(
     temperature: float = 0.3,
     max_tokens: int | None = None,
     provider: str | None = None,
+    session_id: str | None = None,
+    hive: bool | None = None,
 ) -> str:
     """普通文本补全（用于 Planner / Reflection 的自然语言输出）。"""
     if provider:
@@ -96,6 +106,11 @@ async def chat_text(
     if max_tokens:
         kwargs["max_tokens"] = max_tokens
     resp = await client.chat.completions.create(**kwargs)
+    record_usage(
+        provider=effective_provider(provider, capability) or "unknown",
+        model=model, capability=capability, kind="chat",
+        usage=parse_usage(resp), session_id=session_id, hive=hive,
+    )
     return resp.choices[0].message.content or ""
 
 
@@ -108,8 +123,15 @@ async def embed_texts(texts: list[str]) -> list[list[float]] | None:
         return None
     base_url, api_key, model = cfg
     try:
+        from ..config.settings import get_settings
+
+        emb_provider = get_settings().routing.embeddings or "unknown"
         client = _get_client(base_url, api_key)
         resp = await client.embeddings.create(model=model, input=texts)
+        record_usage(
+            provider=emb_provider, model=model, capability="embedding",
+            kind="embedding", usage=parse_usage(resp),
+        )
         return [d.embedding for d in resp.data]
     except Exception:
         return None
