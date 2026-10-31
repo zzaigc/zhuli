@@ -1,0 +1,91 @@
+/* ZHULI v0.2.0 hacker theme overlay.
+   Loaded after the built frontend CSS, so it overrides without
+   rebuilding the React frontend and without touching any API or event.
+   Look only: black background, neon green, monospace, green-bordered
+   boxes, pill navigation, terminal-style section headers, solid green
+   primary buttons (black text) and outlined green secondary buttons.
+   All example text in the console itself is generic; no external
+   subscription or credential content belongs in this file. */
+
+html, body, #root {
+  background: #000000 !important;
+  color: #00ff66 !important;
+  font-family: "JetBrains Mono", "Cascadia Mono", Menlo, Consolas, monospace !important;
+}
+
+body, #root, #root * {
+  font-family: "JetBrains Mono", "Cascadia Mono", Menlo, Consolas, monospace !important;
+}
+
+/* Panels and content boxes: green-bordered boxes on black. */
+.glass, .glass-strong, section, [class*="card"], [class*="Card"] {
+  background: #000000 !important;
+  border: 1px solid #00ff66 !important;
+  border-radius: 6px !important;
+  box-shadow: none !important;
+  color: #00ff66 !important;
+}
+
+/* Top navigation as pill buttons with thin green outlines. */
+header button, nav button, [class*="TopBar"] button, [class*="topbar"] button {
+  border: 1px solid #00ff66 !important;
+  border-radius: 999px !important;
+  background: transparent !important;
+  color: #00ff66 !important;
+  padding: 4px 14px !important;
+}
+
+/* All buttons: pill shape. Primary = solid bright green, black text. */
+button {
+  border-radius: 999px !important;
+  border: 1px solid #00ff66 !important;
+  background: transparent !important;
+  color: #00ff66 !important;
+}
+button:hover {
+  background: rgba(0, 255, 102, 0.15) !important;
+}
+button:disabled {
+  opacity: 0.45 !important;
+}
+/* Built frontend primary buttons use the bg-primary utility. */
+.bg-primary {
+  background: #00ff00 !important;
+  color: #000000 !important;
+  border-color: #00ff00 !important;
+}
+.bg-primary:hover {
+  background: #33ff77 !important;
+}
+/* Secondary / outline buttons: outlined green, green text. */
+.bg-secondary, .bg-muted, .border-input {
+  background: transparent !important;
+  color: #00ff66 !important;
+  border-color: #00ff66 !important;
+}
+
+/* Inputs, textareas, selects: black with a green border. */
+input, textarea, select {
+  background: #000000 !important;
+  color: #00ff66 !important;
+  border: 1px solid #00ff66 !important;
+  caret-color: #00ff66 !important;
+}
+input::placeholder, textarea::placeholder {
+  color: #009944 !important;
+}
+
+/* Section headers in terminal style: leading > marker and // separator. */
+h1::before, h2::before, h3::before {
+  content: "> ";
+  color: #00ff00;
+}
+h2::after {
+  content: " //";
+  color: #009944;
+}
+
+/* Links, badges and scrollbars follow the same palette. */
+a { color: #00ff66 !important; }
+*::-webkit-scrollbar-thumb { background: #00ff66 !important; }
+*::-webkit-scrollbar-track { background: #000000 !important; }
