@@ -1,6 +1,6 @@
 [project]
 name = "zhuli"
-version = "0.1.0"
+version = "0.3.0"
 description = "本地 AI 助理：浏览器自动化 + 视频剪辑 + 命令执行 + 外部工具对接（模块化）"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -22,6 +22,7 @@ dev = ["pytest>=8.0", "ruff>=0.4"]
 
 [project.scripts]
 zhuli = "zhuli.main:main"
+zhuli-mcp = "zhuli.mcp.server:main"
 
 [build-system]
 requires = ["setuptools>=68"]
