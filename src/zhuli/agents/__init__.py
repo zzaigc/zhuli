@@ -59,7 +59,16 @@ def build_registry(settings: Settings,
 
 def build_coordinator(settings: Settings, registry: AgentRegistry, sink=None
                       ) -> Coordinator | HiveCoordinator:
-    """按配置构建协调器：蜂巢模式（群体共识）或常规多智能体流水线。"""
-    if settings.policy.hive_mode and settings.policy.multi_agent:
-        return HiveCoordinator(registry, sink, settings, settings.policy.hive_size)
+    """按配置构建协调器：蜂巢模式（群体共识）或常规多智能体流水线。
+
+    v0.2.0：运行时覆盖（agents.runtime）优先于配置文件，但不改写文件；
+    重启后恢复为配置值。
+    """
+    from .runtime import effective_hive
+
+    hive_enabled, hive_size, hive_mode = effective_hive(
+        settings.policy.hive_mode, settings.policy.hive_size,
+        getattr(settings.policy, "hive_size_mode", "manual"))
+    if hive_enabled and settings.policy.multi_agent:
+        return HiveCoordinator(registry, sink, settings, hive_size, hive_mode)
     return Coordinator(registry, sink, settings)
